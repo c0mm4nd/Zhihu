@@ -8,11 +8,13 @@ import sys
 import json
 import threading
 import time
+from lxml import etree
 
-def saveTopic(t):
+
+def getTopics(t):
 	# print("saveTopic")
 	try:
-		if db.Topics.find_one({"id" : t.id}):
+		if db.Topics.find_one({"id" : str(t.id)}):
 			return t.id
 		else:
 			tpc = {
@@ -25,10 +27,6 @@ def saveTopic(t):
 	except Exception as e:
 		print("Error in saveTopic")
 		print(e)
-	return t.id
-
-def getTopics(t):
-	saveTopic(t)
 	return t.id
 
 def getName(o):
@@ -113,7 +111,7 @@ def getFoId(p):
 
 def saveQuestion(q):
 	try:
-		if db.Questions.find_one({"id" : q.id}):
+		if db.Questions.find_one({"id" : str(q.id)}):
 			return q.id
 		else:
 			qst = {
@@ -132,7 +130,7 @@ def saveQuestion(q):
 
 def savePeople(p):
 	try:
-		if db.People.find_one({"id" : p.id}):
+		if db.People.find_one({"id" : str(p.id)}):
 			return p.id
 		elif p is ANONYMOUS:
 			return p.id
@@ -169,13 +167,24 @@ def main():
 	index_url = 'https://www.zhihu.com/explore'
 	while True:
 		try:
-			index_html = req.get(index_url, headers=headers, timeout=35)
+			# index_html = req.get(index_url, headers=headers, timeout=35)
+			index_html = req.get('https://www.zhihu.com/explore/recommendations', headers=headers, timeout=35)
+			# xsrf = etree.HTML(index_html.text).xpath("/html/body/input[@name='_xsrf']")[0].attrib['value']
+			# rcmd = req.post('https://www.zhihu.com/node/ExploreRecommendListV2', headers=headers, timeout=35, params={'method':'next','params':{"limit":20,"offset":40}}, cookies=req.cookies)
+			# rst=re.findall("/question/([0-9]+)/answer/[0-9]+",index_html.text)
+			# rst=re.findall("question\\/([0-9]+)\\/answer\\/[0-9]+", rcmd.text)
+			# print(rst)
+			# xsrf = etree.HTML(index_html.text).xpath("//input[@name='_xsrf']")[0].attrib['value']
+			# print(xsrf)
+			# headers['X-Xsrftoken'] = xsrf
+			# rcmd = req.post('http://www.zhihu.com/node/ExploreRecommendListV2', headers=headers, timeout=35, params={'method':'next','params':"%7B%22limit%22%3A20%2C%22offset%22%3A40%7D"})
+			rst=re.findall("question/([0-9]+)/answer/[0-9]+", index_html.text)
 			break
 		except Exception as err:
 			# 出现异常重试
 			print("获取页面失败，正在重试......")
+			print(err)
 			time.sleep(5)
-	rst=re.findall("/question/([0-9]+)/answer/[0-9]+",index_html.text)
 	i = 0
 	thd = []
 	for questionid in rst:
@@ -202,18 +211,19 @@ if __name__ == '__main__':
 		"Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
 		"Pragma": "no-cache",
 		"Accept-Encoding": "gzip, deflate, br",
+		"Connection":"keep-alive"
 	}
 
 	un = raw_input("UN:")
 	pw = raw_input("PW:")
 	try:
-		client.login(un, pw)
+		print(client.login(un, pw))
 	except NeedCaptchaException:
 		# 保存验证码并提示输入，重新登录
 		with open('a.gif', 'wb') as f:
 			f.write(client.get_captcha())
-		captcha = input('please input captcha:')
-		client.login(un, pw, captcha)
+		captcha = raw_input('please input captcha:')
+		print(client.login(un, pw, captcha))
 
 	try :
 		mongo = MongoClient('localhost', 27017)
@@ -225,16 +235,24 @@ if __name__ == '__main__':
 
 	maxthreads=400
 	n = 0
+	# while True:
+	# 	try:
+	# 		threadsList = main()
+	# 		if threading.activeCount() < maxthreads:
+	# 			for t in threadsList:
+	# 				t.setDaemon(True)
+	# 				t.start()
+	# 				n = n+1
+	# 				print("Start Thread " + str(n))
+	# 	except Exception as e:
+	# 		print("Error in Thread")
+	# 		print(e)
+	# 	pass
+	threadsList = main()
+	for t in threadsList:
+		t.setDaemon(True)
+		t.start()
+		n = n+1
+		print("Start Thread " + str(n))
 	while True:
-		try:
-			threadsList = main()
-			if threading.activeCount() < maxthreads:
-				for t in threadsList:
-					t.setDaemon(True)
-					t.start()
-					n = n+1
-					print("Start Thread " + str(n))
-		except Exception as e:
-			print("Error in Thread")
-			print(e)
-		pass
+		time.sleep(5)
